@@ -15,31 +15,67 @@ export default async function PersonPage({
   const decodedName = decodeURIComponent(name);
   const { community } = await searchParams;
 
+  // 1. 해당 인물 & 해당 공동체의 기도제목 조회
   let query = supabase
     .from('prayer_requests')
     .select('*')
     .eq('name', decodedName)
     .order('created_at', { ascending: false });
 
-  if (community) {
+  if (community && community !== '전체') {
     query = query.eq('community', community);
   }
 
-  const { data, error } = await query;
+  const { data } = await query;
+
+  // 2. 혹시 같은 이름으로 다른 공동체에 등록된 기도제목이 있는지 확인
+  let otherCommunities: string[] = [];
+  if (community && community !== '전체') {
+    const { data: otherData } = await supabase
+      .from('prayer_requests')
+      .select('community')
+      .eq('name', decodedName)
+      .neq('community', community);
+
+    if (otherData && otherData.length > 0) {
+      otherCommunities = Array.from(new Set(otherData.map(d => d.community)));
+    }
+  }
 
   return (
     <main className="max-w-md mx-auto min-h-screen bg-gray-50 pb-20">
       <header className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-gray-200 z-10 px-4 py-4 flex items-center gap-3">
-        <Link href={`/?community=${community || '전체'}`} className="p-2 -ml-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors">
+        <Link href={`/?community=${encodeURIComponent(community || '전체')}`} className="p-2 -ml-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </Link>
         <div>
           <h1 className="text-xl font-bold text-gray-900">{decodedName}</h1>
-          {community && <p className="text-xs text-blue-600 font-semibold">{community}</p>}
+          {community && community !== '전체' && (
+            <p className="text-xs text-blue-600 font-semibold">{community}</p>
+          )}
         </div>
       </header>
 
-      <div className="p-4 space-y-6 mt-4">
+      <div className="p-4 space-y-6 mt-2">
+        {/* 다른 공동체에도 동일한 이름이 있는 경우 전환 배너 제공 */}
+        {otherCommunities.length > 0 && (
+          <div className="p-3.5 bg-blue-50/70 border border-blue-100 rounded-2xl text-xs text-blue-900">
+            <div className="font-semibold mb-1">💡 다른 공동체 기록 확인</div>
+            <div className="text-gray-600 mb-2">동일한 이름으로 등록된 다른 공동체 기록이 있습니다:</div>
+            <div className="flex flex-wrap gap-1.5">
+              {otherCommunities.map(c => (
+                <Link
+                  key={c}
+                  href={`/person/${encodeURIComponent(decodedName)}?community=${encodeURIComponent(c)}`}
+                  className="px-2.5 py-1 bg-white border border-blue-200 text-blue-600 font-medium rounded-lg hover:bg-blue-600 hover:text-white transition-colors"
+                >
+                  [{c}] 바로가기 →
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         {data?.map((req) => {
           const date = new Date(req.created_at);
           const monthYear = date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
@@ -50,13 +86,18 @@ export default async function PersonPage({
                 <div className="w-2 h-2 rounded-full bg-blue-600" />
               </div>
               
-              <div className="mb-2">
+              <div className="mb-2 flex items-center gap-2">
                 <span className="text-sm font-bold text-gray-800 bg-white border border-gray-200 shadow-sm px-3 py-1 rounded-full">
                   {monthYear}
                 </span>
-                <span className="text-xs text-gray-400 ml-2">
+                <span className="text-xs text-gray-400">
                   {date.toLocaleDateString('ko-KR', { day: 'numeric' })}일
                 </span>
+                {(!community || community === '전체') && (
+                  <span className="text-[11px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md font-semibold">
+                    {req.community}
+                  </span>
+                )}
               </div>
               
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mt-3 whitespace-pre-wrap text-gray-700 leading-relaxed text-[15px]">
@@ -67,7 +108,7 @@ export default async function PersonPage({
         })}
 
         {(!data || data.length === 0) && (
-          <div className="text-center py-10 text-gray-500">
+          <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border border-dashed border-gray-200">
             기도제목 내역이 없습니다.
           </div>
         )}
@@ -75,4 +116,3 @@ export default async function PersonPage({
     </main>
   );
 }
-

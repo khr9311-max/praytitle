@@ -37,19 +37,20 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const { data } = await query;
   
-  // 사람별로 누적 이력 개수 및 최근 일자 그룹화
+  // (공동체 + 이름) 기준으로 그룹화하여 동명이인 또는 공동체별 인물 분리
   const peopleMap = new Map();
   if (data) {
     for (const req of data) {
-      if (!peopleMap.has(req.name)) {
-         peopleMap.set(req.name, {
+      const key = `${req.community}__${req.name}`;
+      if (!peopleMap.has(key)) {
+         peopleMap.set(key, {
             name: req.name,
             community: req.community,
             lastUpdated: req.created_at,
             count: 1
          });
       } else {
-         peopleMap.get(req.name).count += 1;
+         peopleMap.get(key).count += 1;
       }
     }
   }
