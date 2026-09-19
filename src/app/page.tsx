@@ -37,7 +37,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const { data } = await query;
   
-  // 사람별로 가장 최근 데이터만 남기기 (이름 기준 그룹화)
+  // 사람별로 누적 이력 개수 및 최근 일자 그룹화
   const peopleMap = new Map();
   if (data) {
     for (const req of data) {
@@ -45,8 +45,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
          peopleMap.set(req.name, {
             name: req.name,
             community: req.community,
-            lastUpdated: req.created_at
+            lastUpdated: req.created_at,
+            count: 1
          });
+      } else {
+         peopleMap.get(req.name).count += 1;
       }
     }
   }
@@ -57,7 +60,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     <main className="max-w-md mx-auto p-4 pb-20 min-h-screen bg-gray-50">
       <header className="mb-6 pt-6 px-2">
         <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">기도제목 아카이브 🙏</h1>
-        <p className="text-sm text-gray-500 mt-1">공동체별로 기도제목을 확인하세요</p>
+        <p className="text-sm text-gray-500 mt-1">카드를 누르면 그동안 쌓인 모든 기도제목 이력을 볼 수 있습니다.</p>
       </header>
 
       {/* Tabs with Community Management Modal */}
@@ -66,12 +69,20 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       {/* People Grid */}
       <div className="grid grid-cols-2 gap-3 px-2">
         {peopleList.map(person => (
-          <Link href={`/person/${person.name}?community=${encodeURIComponent(person.community)}`} key={`${person.name}-${person.community}`}>
-            <div className="border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow bg-white flex flex-col h-full">
-               <div className="text-xs text-blue-600 font-bold mb-1">{person.community}</div>
-               <div className="text-lg font-bold text-gray-800 mb-3">{person.name}</div>
-               <div className="mt-auto text-[11px] text-gray-400 font-medium">
-                  최근 업데이트: {new Date(person.lastUpdated).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
+          <Link href={`/person/${encodeURIComponent(person.name)}?community=${encodeURIComponent(person.community)}`} key={`${person.name}-${person.community}`}>
+            <div className="border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all bg-white flex flex-col h-full hover:border-blue-400 group">
+               <div className="flex justify-between items-start mb-1.5">
+                 <span className="text-xs text-blue-600 font-bold truncate max-w-[70%]">{person.community}</span>
+                 <span className="text-[10px] bg-blue-50 text-blue-600 font-semibold px-2 py-0.5 rounded-full border border-blue-100 flex-shrink-0">
+                   누적 {person.count}건
+                 </span>
+               </div>
+               <div className="text-lg font-bold text-gray-800 mb-3 group-hover:text-blue-600 transition-colors">{person.name}</div>
+               <div className="mt-auto pt-2.5 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+                  <span>{new Date(person.lastUpdated).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
+                  <span className="text-blue-500 font-medium group-hover:translate-x-0.5 transition-transform flex items-center">
+                    이력 보기 →
+                  </span>
                </div>
             </div>
           </Link>
