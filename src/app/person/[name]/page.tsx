@@ -4,33 +4,37 @@ import Link from 'next/link';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+const MY_NAME = '김홍래';
+
 export default async function PersonPage({ 
   params, 
   searchParams 
 }: { 
   params: Promise<{ name: string }>, 
-  searchParams: Promise<{ community?: string }> 
+  searchParams: Promise<{ community?: string; all?: string }> 
 }) {
   const { name } = await params;
   const decodedName = decodeURIComponent(name);
-  const { community } = await searchParams;
+  const { community, all } = await searchParams;
+  const isMe = decodedName === MY_NAME;
 
-  // 1. 해당 인물 & 해당 공동체의 기도제목 조회
+  // 1. 해당 인물의 기도제목 조회
   let query = supabase
     .from('prayer_requests')
     .select('*')
     .eq('name', decodedName)
     .order('created_at', { ascending: false });
 
-  if (community && community !== '전체') {
+  // 본인(김홍래)이거나 all=true인 경우 모든 공동체 기록을 통합하여 시간순 조회
+  if (!isMe && !all && community && community !== '전체') {
     query = query.eq('community', community);
   }
 
   const { data } = await query;
 
-  // 2. 혹시 같은 이름으로 다른 공동체에 등록된 기도제목이 있는지 확인
+  // 2. 다른 사람일 경우에만 다른 공동체 기록 존재 여부 확인
   let otherCommunities: string[] = [];
-  if (community && community !== '전체') {
+  if (!isMe && community && community !== '전체') {
     const { data: otherData } = await supabase
       .from('prayer_requests')
       .select('community')
@@ -48,17 +52,23 @@ export default async function PersonPage({
         <Link href={`/?community=${encodeURIComponent(community || '전체')}`} className="p-2 -ml-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </Link>
-        <div>
+        <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold text-gray-900">{decodedName}</h1>
-          {community && community !== '전체' && (
-            <p className="text-xs text-blue-600 font-semibold">{community}</p>
+          {isMe ? (
+            <span className="text-[11px] bg-blue-600 text-white font-black px-2 py-0.5 rounded-full shadow-sm">
+              나 (전체 공동체 통합)
+            </span>
+          ) : (
+            community && community !== '전체' && (
+              <p className="text-xs text-blue-600 font-semibold">{community}</p>
+            )
           )}
         </div>
       </header>
 
       <div className="p-4 space-y-6 mt-2">
-        {/* 다른 공동체에도 동일한 이름이 있는 경우 전환 배너 제공 */}
-        {otherCommunities.length > 0 && (
+        {/* 다른 사람일 때 다른 공동체 바로가기 배너 */}
+        {!isMe && otherCommunities.length > 0 && (
           <div className="p-3.5 bg-blue-50/70 border border-blue-100 rounded-2xl text-xs text-blue-900">
             <div className="font-semibold mb-1">💡 다른 공동체 기록 확인</div>
             <div className="text-gray-600 mb-2">동일한 이름으로 등록된 다른 공동체 기록이 있습니다:</div>
@@ -86,15 +96,16 @@ export default async function PersonPage({
                 <div className="w-2 h-2 rounded-full bg-blue-600" />
               </div>
               
-              <div className="mb-2 flex items-center gap-2">
+              <div className="mb-2 flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-bold text-gray-800 bg-white border border-gray-200 shadow-sm px-3 py-1 rounded-full">
                   {monthYear}
                 </span>
                 <span className="text-xs text-gray-400">
                   {date.toLocaleDateString('ko-KR', { day: 'numeric' })}일
                 </span>
-                {(!community || community === '전체') && (
-                  <span className="text-[11px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md font-semibold">
+                {/* 본인이거나 전체보기일 때는 어떤 공동체에서 쓴 기도제목인지 뱃지 표시 */}
+                {(isMe || !community || community === '전체') && (
+                  <span className="text-[11px] text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-md font-bold">
                     {req.community}
                   </span>
                 )}

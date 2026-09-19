@@ -10,6 +10,8 @@ const DEFAULT_COMMUNITIES = [
   '26한사랑국리더십', '26한사랑국운영팀', '직장'
 ];
 
+export const MY_NAME = '김홍래';
+
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ community?: string }> }) {
   const params = await searchParams;
   const selectedCommunity = params.community || '전체';
@@ -37,25 +39,38 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const { data } = await query;
   
-  // (공동체 + 이름) 기준으로 그룹화하여 동명이인 또는 공동체별 인물 분리
+  // 사람별로 누적 이력 개수 및 최근 일자 그룹화
+  // 단, '김홍래'(본인)는 어떤 공동체든 하나로 통합하여 표시
   const peopleMap = new Map();
   if (data) {
     for (const req of data) {
-      const key = `${req.community}__${req.name}`;
+      const isMe = req.name === MY_NAME;
+      const key = isMe ? `ME__${req.name}` : `${req.community}__${req.name}`;
+
       if (!peopleMap.has(key)) {
          peopleMap.set(key, {
             name: req.name,
-            community: req.community,
+            community: isMe ? (selectedCommunity === '전체' ? '모든 공동체 통합' : selectedCommunity) : req.community,
             lastUpdated: req.created_at,
-            count: 1
+            count: 1,
+            isMe
          });
       } else {
-         peopleMap.get(key).count += 1;
+         const item = peopleMap.get(key);
+         item.count += 1;
+         if (new Date(req.created_at) > new Date(item.lastUpdated)) {
+            item.lastUpdated = req.created_at;
+         }
       }
     }
   }
 
-  const peopleList = Array.from(peopleMap.values());
+  // 본인('김홍래')을 가장 맨 앞에 강조 배치, 나머지는 최신순 정렬
+  const peopleList = Array.from(peopleMap.values()).sort((a, b) => {
+    if (a.isMe) return -1;
+    if (b.isMe) return 1;
+    return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
+  });
 
   return (
     <main className="max-w-md mx-auto p-4 pb-20 min-h-screen bg-gray-50">
@@ -69,25 +84,49 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
       {/* People Grid */}
       <div className="grid grid-cols-2 gap-3 px-2">
-        {peopleList.map(person => (
-          <Link href={`/person/${encodeURIComponent(person.name)}?community=${encodeURIComponent(person.community)}`} key={`${person.name}-${person.community}`}>
-            <div className="border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all bg-white flex flex-col h-full hover:border-blue-400 group">
-               <div className="flex justify-between items-start mb-1.5">
-                 <span className="text-xs text-blue-600 font-bold truncate max-w-[70%]">{person.community}</span>
-                 <span className="text-[10px] bg-blue-50 text-blue-600 font-semibold px-2 py-0.5 rounded-full border border-blue-100 flex-shrink-0">
-                   누적 {person.count}건
-                 </span>
-               </div>
-               <div className="text-lg font-bold text-gray-800 mb-3 group-hover:text-blue-600 transition-colors">{person.name}</div>
-               <div className="mt-auto pt-2.5 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
-                  <span>{new Date(person.lastUpdated).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
-                  <span className="text-blue-500 font-medium group-hover:translate-x-0.5 transition-transform flex items-center">
-                    이력 보기 →
-                  </span>
-               </div>
-            </div>
-          </Link>
-        ))}
+        {peopleList.map(person => {
+          const href = person.isMe
+            ? `/person/${encodeURIComponent(person.name)}?all=true`
+            : `/person/${encodeURIComponent(person.name)}?community=${encodeURIComponent(person.community)}`;
+
+          return (
+            <Link href={href} key={`${person.name}-${person.community}`}>
+              <div className={`rounded-2xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col h-full group ${
+                person.isMe 
+                  ? 'bg-gradient-to-br from-blue-50 to-white border-2 border-blue-400 ring-2 ring-blue-100/50' 
+                  : 'bg-white border border-gray-200 hover:border-blue-400'
+              }`}>
+                 <div className="flex justify-between items-start mb-1.5">
+                   <div className="flex items-center gap-1 max-w-[70%] truncate">
+                     {person.isMe && (
+                       <span className="text-[10px] bg-blue-600 text-white font-black px-1.5 py-0.2 rounded-md">
+                         나
+                       </span>
+                     )}
+                     <span className={`text-xs font-bold truncate ${person.isMe ? 'text-blue-700' : 'text-blue-600'}`}>
+                       {person.community}
+                     </span>
+                   </div>
+                   <span className="text-[10px] bg-blue-50 text-blue-600 font-semibold px-2 py-0.5 rounded-full border border-blue-100 flex-shrink-0">
+                     누적 {person.count}건
+                   </span>
+                 </div>
+
+                 <div className="text-lg font-bold text-gray-800 mb-3 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                   {person.name}
+                   {person.isMe && <span className="text-sm">✨</span>}
+                 </div>
+
+                 <div className="mt-auto pt-2.5 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+                    <span>{new Date(person.lastUpdated).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
+                    <span className="text-blue-500 font-medium group-hover:translate-x-0.5 transition-transform flex items-center">
+                      이력 보기 →
+                    </span>
+                 </div>
+              </div>
+            </Link>
+          );
+        })}
         {peopleList.length === 0 && (
           <div className="col-span-2 text-center py-12 text-gray-400 bg-white rounded-2xl border border-dashed border-gray-300">
             등록된 기도제목이 없습니다.
