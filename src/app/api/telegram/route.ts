@@ -9,19 +9,9 @@ const COMMUNITIES = [
   '26한사랑국리더십', '26한사랑국운영팀', '직장'
 ];
 
-// 환경 변수 설정 상태 확인용 GET 엔드포인트
+// 서버 상태 확인용 GET 엔드포인트
 export async function GET() {
-  const url = process.env.SUPABASE_URL || '';
-  return NextResponse.json({
-    status: 'running',
-    hasBotToken: !!process.env.TELEGRAM_BOT_TOKEN,
-    supabaseUrlLength: url.length,
-    supabaseUrlStart: url.substring(0, 20),
-    supabaseUrlEnd: url.substring(url.length - 20),
-    isSupabaseCo: url.includes('.supabase.co'),
-    isDashboardUrl: url.includes('supabase.com'),
-    isPostgresUrl: url.startsWith('postgresql://') || url.startsWith('postgres://'),
-  });
+  return NextResponse.json({ status: 'running' });
 }
 
 async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: any) {
