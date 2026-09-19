@@ -1,11 +1,12 @@
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import CommunityTabs from '@/components/CommunityTabs';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0; // 항상 최신 데이터 패치
 
-const COMMUNITIES = [
-  '전체', '가족', '26하GBS', '기도후원자', '26엘더조', 
+const DEFAULT_COMMUNITIES = [
+  '가족', '26하GBS', '기도후원자', '26엘더조', 
   '26한사랑국리더십', '26한사랑국운영팀', '직장'
 ];
 
@@ -13,12 +14,28 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const params = await searchParams;
   const selectedCommunity = params.community || '전체';
 
+  // 1. 등록된 공동체 목록 불러오기 (DB 또는 기본값)
+  let communityList = ['전체', ...DEFAULT_COMMUNITIES];
+  try {
+    const { data: commData } = await supabase
+      .from('communities')
+      .select('name')
+      .order('id', { ascending: true });
+
+    if (commData && commData.length > 0) {
+      communityList = ['전체', ...commData.map(c => c.name)];
+    }
+  } catch (err) {
+    console.error('Failed to fetch communities:', err);
+  }
+
+  // 2. 기도제목 조회
   let query = supabase.from('prayer_requests').select('name, community, created_at').order('created_at', { ascending: false });
   if (selectedCommunity !== '전체') {
     query = query.eq('community', selectedCommunity);
   }
 
-  const { data, error } = await query;
+  const { data } = await query;
   
   // 사람별로 가장 최근 데이터만 남기기 (이름 기준 그룹화)
   const peopleMap = new Map();
@@ -43,27 +60,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <p className="text-sm text-gray-500 mt-1">공동체별로 기도제목을 확인하세요</p>
       </header>
 
-      {/* Tabs */}
-      <div className="flex overflow-x-auto gap-2 mb-6 pb-2 px-2 scrollbar-hide">
-        {COMMUNITIES.map(c => (
-          <Link 
-            key={c}
-            href={`/?community=${c}`}
-            className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-              selectedCommunity === c 
-                ? 'bg-blue-600 text-white shadow-md' 
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            {c}
-          </Link>
-        ))}
-      </div>
+      {/* Tabs with Community Management Modal */}
+      <CommunityTabs communities={communityList} selectedCommunity={selectedCommunity} />
 
       {/* People Grid */}
       <div className="grid grid-cols-2 gap-3 px-2">
         {peopleList.map(person => (
-          <Link href={`/person/${person.name}?community=${person.community}`} key={`${person.name}-${person.community}`}>
+          <Link href={`/person/${person.name}?community=${encodeURIComponent(person.community)}`} key={`${person.name}-${person.community}`}>
             <div className="border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow bg-white flex flex-col h-full">
                <div className="text-xs text-blue-600 font-bold mb-1">{person.community}</div>
                <div className="text-lg font-bold text-gray-800 mb-3">{person.name}</div>

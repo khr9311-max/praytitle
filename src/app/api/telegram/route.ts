@@ -4,10 +4,26 @@ import { supabase } from '@/lib/supabase';
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
-const COMMUNITIES = [
+const DEFAULT_COMMUNITIES = [
   '가족', '26하GBS', '기도후원자', '26엘더조', 
   '26한사랑국리더십', '26한사랑국운영팀', '직장'
 ];
+
+async function getCommunityList(): Promise<string[]> {
+  try {
+    const { data } = await supabase
+      .from('communities')
+      .select('name')
+      .order('id', { ascending: true });
+
+    if (data && data.length > 0) {
+      return data.map(c => c.name);
+    }
+  } catch (err) {
+    console.error('Error fetching communities for telegram:', err);
+  }
+  return DEFAULT_COMMUNITIES;
+}
 
 // 서버 상태 확인용 GET 엔드포인트
 export async function GET() {
@@ -64,7 +80,6 @@ async function editTelegramMessageText(chatId: number, messageId: number, text: 
 }
 
 function parsePrayerRequests(text: string, community: string) {
-  // 줄바꿈 정규화 (\r\n -> \n)
   const normalizedText = text.replace(/\r\n/g, '\n');
   const blocks = normalizedText.split(/\n\s*\n/);
   const results = [];
@@ -74,10 +89,8 @@ function parsePrayerRequests(text: string, community: string) {
     if (lines.length < 2) continue;
 
     const firstLine = lines[0].trim();
-    // 첫 줄에서 특수문자와 공백을 모두 제거 (예: '👑금동훈' -> '금동훈', '♡ 황윤미' -> '황윤미')
     const cleanName = firstLine.replace(/[^\w가-힣]/g, '').trim();
     
-    // 2~5글자의 한글로만 이루어져 있다면 이름으로 인식
     if (cleanName.length >= 2 && cleanName.length <= 5 && /^[가-힣]+$/.test(cleanName)) {
       const requests = lines.slice(1).join('\n').trim();
       if (requests) {
@@ -101,12 +114,36 @@ export async function POST(req: Request) {
       const chatId = body.message.chat.id;
       const text = body.message.text.trim();
 
-      // /start 명령어 처리
+      // /start 또는 /help 명령어 처리
       if (text === '/start' || text === '/help') {
         await sendTelegramMessage(
           chatId,
-          "안녕하세요! 기도제목 아카이빙 봇입니다. 🙏\n\n기도제목 텍스트를 복사해서 보내주시면, 어느 공동체에 등록할지 선택할 수 있는 버튼을 띄워드립니다."
+          "안녕하세요! 기도제목 아카이빙 봇입니다. 🙏\n\n1. 기도제목 텍스트를 보내주시면 공동체를 선택하여 저장할 수 있습니다.\n2. 새 공동체를 등록하시려면 '/추가 [이름]' (예: /추가 청년부)을 입력해 주세요."
         );
+        return NextResponse.json({ ok: true });
+      }
+
+      // /추가 또는 /add 명령어 처리
+      if (text.startsWith('/추가') || text.startsWith('/add')) {
+        const newName = text.replace(/^\/(추가|add)\s*/, '').trim();
+        if (!newName) {
+          await sendTelegramMessage(chatId, "⚠️ 추가할 공동체 이름을 입력해주세요.\n(예: /추가 청년부)");
+          return NextResponse.json({ ok: true });
+        }
+
+        const { error } = await supabase
+          .from('communities')
+          .insert([{ name: newName }]);
+
+        if (error) {
+          if (error.code === '23505') {
+            await sendTelegramMessage(chatId, `⚠️ 이미 존재하는 공동체입니다: [${newName}]`);
+          } else {
+            await sendTelegramMessage(chatId, `❌ 추가 실패: ${error.message}\n(Supabase에 communities 테이블이 생성되었는지 확인해주세요)`);
+          }
+        } else {
+          await sendTelegramMessage(chatId, `✅ 새로운 공동체 [${newName}]이(가) 추가되었습니다!\n웹과 봇에 바로 반영됩니다.`);
+        }
         return NextResponse.json({ ok: true });
       }
 
@@ -136,13 +173,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
 
+      // 등록된 최신 공동체 목록 가져오기
+      const communities = await getCommunityList();
+
       // 인라인 키보드 생성
       const keyboard = [];
-      for (let i = 0; i < COMMUNITIES.length; i += 2) {
+      for (let i = 0; i < communities.length; i += 2) {
         const row = [];
-        row.push({ text: COMMUNITIES[i], callback_data: `c:${data.id}:${COMMUNITIES[i]}` });
-        if (COMMUNITIES[i+1]) {
-          row.push({ text: COMMUNITIES[i+1], callback_data: `c:${data.id}:${COMMUNITIES[i+1]}` });
+        row.push({ text: communities[i], callback_data: `c:${data.id}:${communities[i]}` });
+        if (communities[i+1]) {
+          row.push({ text: communities[i+1], callback_data: `c:${data.id}:${communities[i+1]}` });
         }
         keyboard.push(row);
       }

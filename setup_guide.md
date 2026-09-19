@@ -68,3 +68,4 @@ https://api.telegram.org/bot(여기에봇토큰)/setWebhook?url=(여기에Vercel
 브라우저 화면에 `{"ok":true,"result":true,"description":"Webhook was set"}` 라고 뜨면 모든 준비가 완료된 것입니다! 🎉
 
 이제 텔레그램 봇에게 텍스트를 보내 테스트해 보세요!
+
